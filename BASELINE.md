@@ -1,7 +1,7 @@
 # Asia Pacific Em-dat Dashboard — Baseline Document
 
-**Version:** 1.0  
-**Last updated:** June 15, 2026  
+**Version:** 1.1  
+**Last updated:** June 24, 2026  
 **Purpose:** Reference baseline for dashboard scope, data rules, UI behaviour, and implementation. Use this document to restore or compare against the agreed functionality.
 
 ---
@@ -16,6 +16,9 @@
 | **Stack** | Next.js 16 (App Router), React 19, Tailwind CSS v4, Recharts 3, TypeScript |
 | **Data source** | EM-DAT export (`Emdat-asia pacific.xlsx`) |
 | **Runtime data** | Static JSON (`data/disasters.json`) generated at build time |
+| **Live URL** | https://asiapacific-disaster-dashboard--emdatdashboard.us-east4.hosted.app/ |
+| **GitHub** | https://github.com/Share1984/asiapacific-disaster-dashboard |
+| **Firebase project** | `emdatdashboard` (App Hosting, Blaze plan) |
 
 ---
 
@@ -281,10 +284,10 @@ All charts respect global filters (year, disaster group, disaster type, geograph
 
 ```
 asiapacific-disaster-dashboard/
-├── Emdat-asia pacific.xlsx          # Source data (not committed if large — verify .gitignore)
+├── Emdat-asia pacific.xlsx          # Source data (~1.8 MB, committed)
 ├── BASELINE.md                      # This document
 ├── data/
-│   └── disasters.json               # Generated JSON (parse output)
+│   └── disasters.json               # Generated JSON (~1.3 MB, committed; regenerated on build)
 ├── scripts/
 │   └── parse-emdat.ts               # Excel → JSON parser
 ├── lib/
@@ -362,11 +365,44 @@ To return to this baseline after changes:
 - [ ] Pie chart: top 5 + Other with percentages
 - [ ] Light theme, title "Asia Pacific Em-dat dashboard"
 - [ ] `npm run build` and `npm run lint` pass with no TypeScript errors
+- [ ] GitHub repo at `Share1984/asiapacific-disaster-dashboard`
+- [ ] `git remote` points to `https://github.com/Share1984/asiapacific-disaster-dashboard.git`
+- [ ] Firebase App Hosting deploy succeeds on Node 22
+- [ ] Live URL loads: https://asiapacific-disaster-dashboard--emdatdashboard.us-east4.hosted.app/
 
 ---
 
-## 14. Change log
+## 14. Source control & deployment
+
+| Item | Value |
+|------|-------|
+| **GitHub owner** | `Share1984` (transferred from `madusarkar-tech`) |
+| **Repository** | https://github.com/Share1984/asiapacific-disaster-dashboard |
+| **Default branch** | `main` |
+| **Git remote** | `origin` → `https://github.com/Share1984/asiapacific-disaster-dashboard.git` |
+| **Firebase project** | `emdatdashboard` |
+| **Hosting** | Firebase **App Hosting** (requires **Blaze** plan) |
+| **Region** | `us-east4` |
+| **Deploy trigger** | Push to `main` via GitHub ↔ Firebase App Hosting |
+| **Node version (Firebase)** | **22** |
+| **Build command** | `npm run build` (runs `prebuild` → `parse-data`) |
+| **Live URL** | https://asiapacific-disaster-dashboard--emdatdashboard.us-east4.hosted.app/ |
+
+**Accounts:**
+- **Share1984** — GitHub repo owner; connected to Firebase App Hosting for deploys
+- **Firebase/Google** — `emdatdashboard` project admin via primary Google account (or IAM-granted access)
+
+**Local git remote update** (if still pointing at old owner):
+
+```bash
+git remote set-url origin https://github.com/Share1984/asiapacific-disaster-dashboard.git
+```
+
+---
+
+## 15. Change log
 
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-06-15 | 1.0 | Initial baseline: full dashboard, static JSON pipeline, filters, metrics, three charts, trend lines on line + bar charts |
+| 2026-06-24 | 1.1 | GitHub repo transferred to Share1984; Firebase App Hosting live on `emdatdashboard` (Blaze, Node 22, us-east4); deployment and live URL documented |
