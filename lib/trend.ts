@@ -3,6 +3,9 @@ export interface TrendPoint {
   y: number;
 }
 
+/** Years included in trend regression and trend line display (2026 excluded as partial-year data). */
+export const TREND_MAX_YEAR = 2025;
+
 export function computeLinearRegression(points: TrendPoint[]): {
   slope: number;
   intercept: number;
@@ -45,24 +48,45 @@ export function trendValue(
   return regression.slope * year + regression.intercept;
 }
 
+function regressionPointsForTrend<T extends { year: number }>(
+  data: T[],
+  getY: (row: T) => number,
+): TrendPoint[] {
+  return data
+    .filter((row) => row.year <= TREND_MAX_YEAR)
+    .map((row) => ({
+      x: row.year,
+      y: getY(row),
+    }));
+}
+
+function trendValueForYear(
+  year: number,
+  regression: { slope: number; intercept: number },
+): number | null {
+  if (year > TREND_MAX_YEAR) {
+    return null;
+  }
+  return trendValue(year, regression);
+}
+
 export function addTrendField<T extends { year: number }>(
   data: T[],
   valueKey: keyof T & string,
   trendKey: string,
-): Array<T & Record<string, number>> {
+): Array<T & Record<string, number | null>> {
   if (data.length === 0) {
     return [];
   }
 
-  const points = data.map((row) => ({
-    x: row.year,
-    y: Number(row[valueKey] ?? 0),
-  }));
+  const points = regressionPointsForTrend(data, (row) =>
+    Number(row[valueKey] ?? 0),
+  );
   const regression = computeLinearRegression(points);
 
   return data.map((row) => ({
     ...row,
-    [trendKey]: trendValue(row.year, regression),
+    [trendKey]: trendValueForYear(row.year, regression),
   }));
 }
 
@@ -70,7 +94,7 @@ export function addMultiTrendFields<T extends { year: number }>(
   data: T[],
   valueKeys: string[],
   trendSuffix = "Trend",
-): Array<T & Record<string, number>> {
+): Array<T & Record<string, number | null>> {
   if (data.length === 0) {
     return [];
   }
@@ -79,17 +103,16 @@ export function addMultiTrendFields<T extends { year: number }>(
     key,
     trendKey: `${key}${trendSuffix}`,
     regression: computeLinearRegression(
-      data.map((row) => ({
-        x: row.year,
-        y: Number((row as Record<string, number>)[key] ?? 0),
-      })),
+      regressionPointsForTrend(data, (row) =>
+        Number((row as Record<string, number>)[key] ?? 0),
+      ),
     ),
   }));
 
   return data.map((row) => {
-    const trendValues: Record<string, number> = {};
+    const trendValues: Record<string, number | null> = {};
     for (const { trendKey, regression } of regressions) {
-      trendValues[trendKey] = trendValue(row.year, regression);
+      trendValues[trendKey] = trendValueForYear(row.year, regression);
     }
     return { ...row, ...trendValues };
   });

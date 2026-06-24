@@ -280,6 +280,7 @@ All charts respect global filters (year, disaster group, disaster type, geograph
 **Module:** `lib/trend.ts`
 
 - Method: **Ordinary least-squares linear regression** on (year, value) pairs
+- **Year range for trends:** regression and trend line use years **through 2025** only; **2026 is excluded** (partial-year data). Actual data bars/lines may still show 2026.
 - Applied to: line chart and bar chart only
 - Visual style: `strokeDasharray="6 4"`, no dots on trend lines
 - Line chart trend colour: `#64748b` (single view); subregion colour (compare mode)
