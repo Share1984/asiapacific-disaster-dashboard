@@ -1,6 +1,6 @@
 # Asia Pacific Em-dat Dashboard — Baseline Document
 
-**Version:** 1.2  
+**Version:** 1.3  
 **Last updated:** June 24, 2026  
 **Purpose:** Reference baseline for dashboard scope, data rules, UI behaviour, and implementation. Use this document to restore or compare against the agreed functionality.
 
@@ -85,6 +85,23 @@ interface DisasterRecord {
 | Actual year range in data | 2000 – 2026 |
 | Filter year range (UI) | 1970 – 2026 |
 
+### 2.7 EM-DAT classification hierarchy
+
+Records follow the EM-DAT tree (all four levels stored and filterable):
+
+```
+Disaster Group → Disaster Subgroup → Disaster Type → Disaster Subtype
+```
+
+| Level | Count in dataset | Examples |
+|-------|------------------|----------|
+| Group | 2 | Natural, Technological |
+| Subgroup | 7 | Hydrological, Meteorological, Industrial accident |
+| Type | 22 | Flood, Storm, Chemical spill |
+| Subtype | 46 | Riverine flood, Tropical cyclone, Ground movement |
+
+For **Technological** disasters, type and subtype are typically 1:1. For **Natural** disasters, subtype is the most granular level.
+
 ---
 
 ## 3. Data transformation rules
@@ -144,13 +161,20 @@ Filters are split into two layers.
 
 ### 4.1 Layer A — global (always applies to all widgets)
 
+**Everyday filters** (always visible):
+
 | Filter | Control | Default | Behaviour |
 |--------|---------|---------|-----------|
 | Year range | Dual range sliders (From / To) | 1970 – 2026 | Both sliders constrain `yearMin` and `yearMax` |
 | Disaster Group | Single-select dropdown | **Natural** | Options: All groups + values from data |
 | Disaster Type | Single-select dropdown | All types | Options: All types valid for selected group |
-| Disaster Subgroup | Advanced expander dropdown | All subgroups | Cascading: options valid for selected group/type |
-| Disaster Subtype | Advanced expander dropdown | All subtypes | Cascading: options valid for selected group/type/subgroup |
+
+**Advanced classification** (collapsed expander):
+
+| Filter | Control | Default | Behaviour |
+|--------|---------|---------|-----------|
+| Disaster Subgroup | Single-select dropdown | All subgroups | Options valid for selected group and type |
+| Disaster Subtype | Single-select dropdown | All subtypes | Options valid for selected group, type, and subgroup |
 
 **Cascading rules:**
 - Changing **Group** resets type, subgroup, and subtype to All
@@ -211,13 +235,13 @@ Component: `components/MetricCards.tsx`
 3. **Total Affected** — sum of `totalAffected` (nulls excluded)  
 4. **Total Damage, Adjusted ('000 US$)** — sum of `totalDamageAdjusted` (nulls excluded)
 
-All metrics respect Layer A + Layer B filters.
+All metrics respect Layer A + Layer B filters. Geography scope narrows the dataset; metric tabs still show regional, subregion, and country breakdowns of the filtered data.
 
 ---
 
 ## 6. Charts
 
-All charts respect global filters (year, disaster group, disaster type, geography scope). Each chart may have additional local controls.
+All charts respect global filters (year, disaster classification, geography scope). Each chart may have additional local controls.
 
 ### 6.1 Line chart — disaster frequency over time
 
@@ -232,11 +256,11 @@ All charts respect global filters (year, disaster group, disaster type, geograph
 | Subregion picker | Shown when view mode = Subregion |
 | Country picker | Shown when view mode = Country |
 | **Compare subregions** | Checkbox; overlays all 5 subregion lines on one chart |
-| Trend lines | Linear regression (least squares), dashed overlay |
+| Trend lines | Linear regression (least squares), dashed overlay; fit through **2025** only (see §7) |
 
 **Trend line behaviour:**
-- Single view: dashed gray **Trend** line alongside data line
-- Compare subregions: dashed trend line per subregion (matching subregion colour)
+- Single view: dashed gray **Trend** line alongside data line (ends at 2025)
+- Compare subregions: dashed trend line per subregion (matching subregion colour; ends at 2025)
 
 **Local controls** (independent of geography filter scope for view selection; still uses global filters for data):
 
@@ -256,7 +280,7 @@ All charts respect global filters (year, disaster group, disaster type, geograph
 | Metric selector | Single-select: Total Deaths / Total Affected / Total Damage, Adjusted |
 | Geography | Follows global geography scope |
 | All Asia-Pacific scope | One bar per year for the whole region |
-| Trend line | Amber dashed linear regression overlay |
+| Trend line | Amber dashed linear regression overlay; fit through **2025** only (see §7) |
 
 ### 6.3 Pie chart — disaster distribution
 
@@ -267,7 +291,7 @@ All charts respect global filters (year, disaster group, disaster type, geograph
 | Chart type | Pie chart |
 | Scope | Follows global geography scope |
 | Mode | **Event share** (disaster count) or **Impact share** (sum of deaths / affected / damage) |
-| Break down by | Disaster Subtype, Type, or Subgroup |
+| Break down by | Disaster Subtype, Type, or Subgroup (default: **Type**) |
 | Grouping | Top **8** slices + **Other** |
 | Labels | Classification name + percentage |
 | Footnote | Impact share shows how many events have reported values for the selected metric |
@@ -280,7 +304,8 @@ All charts respect global filters (year, disaster group, disaster type, geograph
 **Module:** `lib/trend.ts`
 
 - Method: **Ordinary least-squares linear regression** on (year, value) pairs
-- **Year range for trends:** regression and trend line use years **through 2025** only; **2026 is excluded** (partial-year data). Actual data bars/lines may still show 2026.
+- **Constant:** `TREND_MAX_YEAR = 2025` in `lib/trend.ts`
+- **Year range for trends:** regression and trend line use years **through 2025** only; **2026 is excluded** (partial-year data). Actual data bars/lines may still show 2026; trend values are `null` for 2026 so the dashed line stops at 2025.
 - Applied to: line chart and bar chart only
 - Visual style: `strokeDasharray="6 4"`, no dots on trend lines
 - Line chart trend colour: `#64748b` (single view); subregion colour (compare mode)
@@ -363,10 +388,12 @@ asiapacific-disaster-dashboard/
 ## 12. Known limitations / baseline caveats
 
 1. **Year filter vs data:** UI allows 1970–2026, but baseline data only contains years **2000–2026**.
-2. **Country coverage:** 47 countries after normalization; not all ESCAP member states appear in the source file.
-3. **Pie chart:** No trend line (not meaningful for categorical distribution).
-4. **SSR chart warnings:** Recharts may log width/height warnings during static generation; charts render correctly in the browser.
-5. **Line chart view controls:** Geography view selectors on the line chart are independent of the global geography scope filter (both apply: global filter narrows data; local control chooses aggregation view).
+2. **Partial 2026 data:** 2026 may be incomplete; trend lines intentionally exclude 2026 from regression and display (§7).
+3. **Country coverage:** 47 countries after normalization; not all ESCAP member states appear in the source file.
+4. **Damage reporting:** Many events lack `totalDamageAdjusted`; impact totals and damage-based pie slices use only events with reported values.
+5. **Pie chart:** No trend line (not meaningful for categorical distribution).
+6. **SSR chart warnings:** Recharts may log width/height warnings during static generation; charts render correctly in the browser.
+7. **Line chart view controls:** Geography view selectors on the line chart are independent of the global geography scope filter (both apply: global filter narrows data; local control chooses aggregation view).
 
 ---
 
@@ -381,10 +408,10 @@ To return to this baseline after changes:
 - [ ] Russia mapped to ENEA only
 - [ ] Metric tabs: Asia-Pacific | By subregion | By country
 - [ ] Disaster filters: Group + Type (advanced: Subgroup + Subtype)
-- [ ] Pie chart: Event share + Impact share modes
-- [ ] Line chart: compare subregions + trend lines
-- [ ] Bar chart: metric toggle + yearly bars + trend line
-- [ ] Pie chart: top 5 + Other with percentages
+- [ ] Pie chart: Event share + Impact share modes; top 8 + Other
+- [ ] Line chart: compare subregions + trend lines (through 2025)
+- [ ] Bar chart: metric toggle + yearly bars + trend line (through 2025)
+- [ ] Trend lines exclude 2026 from regression and display
 - [ ] Light theme, title "Asia Pacific Em-dat dashboard"
 - [ ] `npm run build` and `npm run lint` pass with no TypeScript errors
 - [ ] GitHub repo at `Share1984/asiapacific-disaster-dashboard`
@@ -429,3 +456,4 @@ git remote set-url origin https://github.com/Share1984/asiapacific-disaster-dash
 | 2026-06-15 | 1.0 | Initial baseline: full dashboard, static JSON pipeline, filters, metrics, three charts, trend lines on line + bar charts |
 | 2026-06-24 | 1.1 | GitHub repo transferred to Share1984; Firebase App Hosting live on `emdatdashboard` (Blaze, Node 22, us-east4); deployment and live URL documented |
 | 2026-06-24 | 1.2 | Full EM-DAT classification hierarchy (group/subgroup/type/subtype); cascading filters with advanced expander; country metrics tab; pie chart event vs impact share |
+| 2026-06-24 | 1.3 | Main filters: Group + Type; advanced: Subgroup + Subtype; trend lines fit through 2025 only (2026 excluded); documentation sync |
