@@ -12,7 +12,9 @@ export type GeographyScope = "all" | "subregion" | "country";
 
 export interface DisasterRecord {
   disasterGroup: string;
+  disasterSubgroup: string;
   disasterType: string;
+  disasterSubtype: string;
   country: string;
   year: number;
   totalDeaths: number | null;
@@ -25,7 +27,9 @@ export interface DashboardFilters {
   yearMin: number;
   yearMax: number;
   disasterGroup: string;
+  disasterSubgroup: string;
   disasterType: string;
+  disasterSubtype: string;
   scope: GeographyScope;
   subregion: EscapSubregion | "";
   country: string;
@@ -34,3 +38,7 @@ export interface DashboardFilters {
 export type BarMetric = "deaths" | "affected" | "damage";
 
 export type LineViewMode = "all" | "subregion" | "country";
+
+export type ClassificationLevel = "subgroup" | "type" | "subtype";
+
+export type PieMode = "event" | "impact";

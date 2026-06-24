@@ -50,7 +50,9 @@ function main() {
 
     records.push({
       disasterGroup: String(row["Disaster Group"] ?? ""),
+      disasterSubgroup: String(row["Disaster Subgroup"] ?? ""),
       disasterType: String(row["Disaster Type"] ?? ""),
+      disasterSubtype: String(row["Disaster Subtype"] ?? ""),
       country,
       year,
       totalDeaths: parseOptionalNumber(row["Total Deaths"]),

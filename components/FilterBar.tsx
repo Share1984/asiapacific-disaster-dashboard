@@ -1,17 +1,21 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { getEscapSubregion } from "@/lib/escap-regions";
+import { getClassificationOptions } from "@/lib/aggregations";
 import {
   ESCAP_SUBREGIONS,
   type DashboardFilters,
+  type DisasterRecord,
   type EscapSubregion,
   type GeographyScope,
 } from "@/lib/types";
 
 interface FilterBarProps {
   filters: DashboardFilters;
+  records: DisasterRecord[];
   disasterGroups: string[];
-  disasterTypes: string[];
   countries: string[];
   onChange: (filters: DashboardFilters) => void;
 }
@@ -24,15 +28,52 @@ const SUBREGION_SHORT: Record<EscapSubregion, string> = {
   "Southeast Asia": "SEA",
 };
 
+const selectClassName =
+  "rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900";
+
 export function FilterBar({
   filters,
+  records,
   disasterGroups,
-  disasterTypes,
   countries,
   onChange,
 }: FilterBarProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const classificationOptions = useMemo(
+    () => getClassificationOptions(records, filters),
+    [records, filters],
+  );
+
   const update = (partial: Partial<DashboardFilters>) => {
     onChange({ ...filters, ...partial });
+  };
+
+  const handleGroupChange = (disasterGroup: string) => {
+    onChange({
+      ...filters,
+      disasterGroup,
+      disasterSubgroup: "All",
+      disasterType: "All",
+      disasterSubtype: "All",
+    });
+  };
+
+  const handleTypeChange = (disasterType: string) => {
+    onChange({
+      ...filters,
+      disasterType,
+      disasterSubgroup: "All",
+      disasterSubtype: "All",
+    });
+  };
+
+  const handleSubgroupChange = (disasterSubgroup: string) => {
+    onChange({
+      ...filters,
+      disasterSubgroup,
+      disasterSubtype: "All",
+    });
   };
 
   const handleScopeChange = (scope: GeographyScope) => {
@@ -130,8 +171,8 @@ export function FilterBar({
           Disaster Group
           <select
             value={filters.disasterGroup}
-            onChange={(e) => update({ disasterGroup: e.target.value })}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+            onChange={(e) => handleGroupChange(e.target.value)}
+            className={selectClassName}
           >
             <option value="All">All groups</option>
             {disasterGroups.map((group) => (
@@ -146,17 +187,68 @@ export function FilterBar({
           Disaster Type
           <select
             value={filters.disasterType}
-            onChange={(e) => update({ disasterType: e.target.value })}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+            onChange={(e) => handleTypeChange(e.target.value)}
+            className={selectClassName}
           >
             <option value="All">All types</option>
-            {disasterTypes.map((type) => (
+            {classificationOptions.disasterTypes.map((type) => (
               <option key={type} value={type}>
                 {type}
               </option>
             ))}
           </select>
         </label>
+      </div>
+
+      <div className="mb-5">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((open) => !open)}
+          className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900"
+        >
+          {advancedOpen ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          )}
+          Advanced classification
+        </button>
+
+        {advancedOpen && (
+          <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm text-slate-600">
+              Disaster Subgroup
+              <select
+                value={filters.disasterSubgroup}
+                onChange={(e) => handleSubgroupChange(e.target.value)}
+                className={selectClassName}
+              >
+                <option value="All">All subgroups</option>
+                {classificationOptions.disasterSubgroups.map((subgroup) => (
+                  <option key={subgroup} value={subgroup}>
+                    {subgroup}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-slate-600">
+              Disaster Subtype
+              <select
+                value={filters.disasterSubtype}
+                onChange={(e) => update({ disasterSubtype: e.target.value })}
+                className={selectClassName}
+              >
+                <option value="All">All subtypes</option>
+                {classificationOptions.disasterSubtypes.map((subtype) => (
+                  <option key={subtype} value={subtype}>
+                    {subtype}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -192,7 +284,7 @@ export function FilterBar({
                 onChange={(e) =>
                   update({ subregion: e.target.value as EscapSubregion })
                 }
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                className={selectClassName}
               >
                 {ESCAP_SUBREGIONS.map((subregion) => (
                   <option key={subregion} value={subregion}>
@@ -210,7 +302,7 @@ export function FilterBar({
                 <select
                   value={filters.country}
                   onChange={(e) => handleCountryChange(e.target.value)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                  className={selectClassName}
                 >
                   {countries.map((country) => (
                     <option key={country} value={country}>

@@ -1,9 +1,11 @@
 import {
   ESCAP_SUBREGIONS,
   type BarMetric,
+  type ClassificationLevel,
   type DashboardFilters,
   type DisasterRecord,
   type EscapSubregion,
+  type PieMode,
 } from "./types";
 
 export interface MetricTotals {
@@ -42,6 +44,34 @@ function parseOptionalNumber(value: unknown): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
+function getClassificationKey(
+  record: DisasterRecord,
+  level: ClassificationLevel,
+): string {
+  switch (level) {
+    case "subgroup":
+      return record.disasterSubgroup;
+    case "type":
+      return record.disasterType;
+    case "subtype":
+      return record.disasterSubtype;
+  }
+}
+
+function getMetricValue(
+  record: DisasterRecord,
+  metric: BarMetric,
+): number | null {
+  switch (metric) {
+    case "deaths":
+      return record.totalDeaths;
+    case "affected":
+      return record.totalAffected;
+    case "damage":
+      return record.totalDamageAdjusted;
+  }
+}
+
 export function applyFilters(
   records: DisasterRecord[],
   filters: DashboardFilters,
@@ -57,8 +87,20 @@ export function applyFilters(
       return false;
     }
     if (
+      filters.disasterSubgroup !== "All" &&
+      record.disasterSubgroup !== filters.disasterSubgroup
+    ) {
+      return false;
+    }
+    if (
       filters.disasterType !== "All" &&
       record.disasterType !== filters.disasterType
+    ) {
+      return false;
+    }
+    if (
+      filters.disasterSubtype !== "All" &&
+      record.disasterSubtype !== filters.disasterSubtype
     ) {
       return false;
     }
@@ -117,6 +159,30 @@ export function computeSubregionTotals(
   return result;
 }
 
+export function computeCountryTotals(
+  records: DisasterRecord[],
+): Record<string, MetricTotals> {
+  const countries = new Set(records.map((record) => record.country));
+  const result: Record<string, MetricTotals> = {};
+
+  for (const country of countries) {
+    const countryRecords = records.filter(
+      (record) => record.country === country,
+    );
+    result[country] = computeTotals(countryRecords);
+  }
+
+  return result;
+}
+
+export function countRecordsWithMetric(
+  records: DisasterRecord[],
+  metric: BarMetric,
+): number {
+  return records.filter((record) => getMetricValue(record, metric) !== null)
+    .length;
+}
+
 export function disasterFrequencyByYear(
   records: DisasterRecord[],
 ): YearlyCount[] {
@@ -159,12 +225,7 @@ export function yearlyMetricTotals(
   const yearMap = new Map<number, number>();
 
   for (const record of records) {
-    const value =
-      metric === "deaths"
-        ? record.totalDeaths
-        : metric === "affected"
-          ? record.totalAffected
-          : record.totalDamageAdjusted;
+    const value = getMetricValue(record, metric);
 
     if (value === null) {
       continue;
@@ -178,25 +239,20 @@ export function yearlyMetricTotals(
     .sort((a, b) => a.year - b.year);
 }
 
-export function disasterTypeDistribution(
-  records: DisasterRecord[],
-  topN = 5,
+function buildPieSlices(
+  counts: Map<string, number>,
+  total: number,
+  topN: number,
 ): PieSlice[] {
-  const counts = new Map<string, number>();
-
-  for (const record of records) {
-    counts.set(record.disasterType, (counts.get(record.disasterType) ?? 0) + 1);
-  }
-
-  const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-  const total = records.length;
-
   if (total === 0) {
     return [];
   }
 
+  const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
   const top = sorted.slice(0, topN);
-  const otherCount = sorted.slice(topN).reduce((sum, [, count]) => sum + count, 0);
+  const otherCount = sorted
+    .slice(topN)
+    .reduce((sum, [, count]) => sum + count, 0);
 
   const slices: PieSlice[] = top.map(([name, value]) => ({
     name,
@@ -215,20 +271,98 @@ export function disasterTypeDistribution(
   return slices;
 }
 
+export function disasterClassificationDistribution(
+  records: DisasterRecord[],
+  mode: PieMode,
+  level: ClassificationLevel,
+  impactMetric: BarMetric = "deaths",
+  topN = 8,
+): PieSlice[] {
+  const counts = new Map<string, number>();
+
+  if (mode === "event") {
+    for (const record of records) {
+      const key = getClassificationKey(record, level);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return buildPieSlices(counts, records.length, topN);
+  }
+
+  for (const record of records) {
+    const value = getMetricValue(record, impactMetric);
+    if (value === null) {
+      continue;
+    }
+    const key = getClassificationKey(record, level);
+    counts.set(key, (counts.get(key) ?? 0) + value);
+  }
+
+  const total = Array.from(counts.values()).reduce((sum, value) => sum + value, 0);
+  return buildPieSlices(counts, total, topN);
+}
+
+export function getClassificationOptions(
+  records: DisasterRecord[],
+  context: Pick<
+    DashboardFilters,
+    "disasterGroup" | "disasterSubgroup" | "disasterType"
+  >,
+) {
+  let filtered = records;
+
+  if (context.disasterGroup !== "All") {
+    filtered = filtered.filter(
+      (record) => record.disasterGroup === context.disasterGroup,
+    );
+  }
+
+  const types = new Set<string>();
+  for (const record of filtered) {
+    types.add(record.disasterType);
+  }
+
+  let subgroupFiltered = filtered;
+  if (context.disasterType !== "All") {
+    subgroupFiltered = subgroupFiltered.filter(
+      (record) => record.disasterType === context.disasterType,
+    );
+  }
+
+  const subgroups = new Set<string>();
+  for (const record of subgroupFiltered) {
+    subgroups.add(record.disasterSubgroup);
+  }
+
+  let subtypeFiltered = subgroupFiltered;
+  if (context.disasterSubgroup !== "All") {
+    subtypeFiltered = subtypeFiltered.filter(
+      (record) => record.disasterSubgroup === context.disasterSubgroup,
+    );
+  }
+
+  const subtypes = new Set<string>();
+  for (const record of subtypeFiltered) {
+    subtypes.add(record.disasterSubtype);
+  }
+
+  return {
+    disasterSubgroups: Array.from(subgroups).sort(),
+    disasterTypes: Array.from(types).sort(),
+    disasterSubtypes: Array.from(subtypes).sort(),
+  };
+}
+
 export function getUniqueValues(records: DisasterRecord[]) {
   const groups = new Set<string>();
-  const types = new Set<string>();
   const countries = new Set<string>();
 
   for (const record of records) {
     groups.add(record.disasterGroup);
-    types.add(record.disasterType);
     countries.add(record.country);
   }
 
   return {
     disasterGroups: Array.from(groups).sort(),
-    disasterTypes: Array.from(types).sort(),
     countries: Array.from(countries).sort(),
   };
 }

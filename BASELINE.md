@@ -1,6 +1,6 @@
 # Asia Pacific Em-dat Dashboard — Baseline Document
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Last updated:** June 24, 2026  
 **Purpose:** Reference baseline for dashboard scope, data rules, UI behaviour, and implementation. Use this document to restore or compare against the agreed functionality.
 
@@ -42,7 +42,9 @@
 | Source column | JSON field | Notes |
 |---------------|------------|-------|
 | `Disaster Group` | `disasterGroup` | e.g. Natural, Technological |
-| `Disaster Type` | `disasterType` | e.g. Flood, Earthquake |
+| `Disaster Subgroup` | `disasterSubgroup` | e.g. Hydrological, Meteorological |
+| `Disaster Type` | `disasterType` | e.g. Flood, Storm, Earthquake |
+| `Disaster Subtype` | `disasterSubtype` | e.g. Riverine flood, Tropical cyclone |
 | `Country` | `country` | Normalized (see §3.1) |
 | `Start Year` | `year` | Integer |
 | `Total Deaths` | `totalDeaths` | `null` if blank |
@@ -58,7 +60,9 @@
 ```typescript
 interface DisasterRecord {
   disasterGroup: string;
+  disasterSubgroup: string;
   disasterType: string;
+  disasterSubtype: string;
   country: string;
   year: number;
   totalDeaths: number | null;
@@ -74,7 +78,9 @@ interface DisasterRecord {
 |-----------|-------|
 | Total records | 5,273 |
 | Disaster groups | Natural, Technological |
+| Disaster subgroups | 7 |
 | Disaster types | 22 |
+| Disaster subtypes | 46 |
 | Countries (after normalization) | 47 |
 | Actual year range in data | 2000 – 2026 |
 | Filter year range (UI) | 1970 – 2026 |
@@ -142,7 +148,15 @@ Filters are split into two layers.
 |--------|---------|---------|-----------|
 | Year range | Dual range sliders (From / To) | 1970 – 2026 | Both sliders constrain `yearMin` and `yearMax` |
 | Disaster Group | Single-select dropdown | **Natural** | Options: All groups + values from data |
-| Disaster Type | Single-select dropdown | All types | Options: All types + values from data |
+| Disaster Type | Single-select dropdown | All types | Options: All types valid for selected group |
+| Disaster Subgroup | Advanced expander dropdown | All subgroups | Cascading: options valid for selected group/type |
+| Disaster Subtype | Advanced expander dropdown | All subtypes | Cascading: options valid for selected group/type/subgroup |
+
+**Cascading rules:**
+- Changing **Group** resets type, subgroup, and subtype to All
+- Changing **Type** resets subgroup and subtype to All
+- Changing **Subgroup** resets subtype to All
+- **All types** under Natural = all Natural events only (not Technological)
 
 ### 4.2 Layer B — geography (mutually exclusive scope)
 
@@ -167,7 +181,9 @@ Single-select scope; geography filters do **not** stack with each other.
   yearMin: 1970,
   yearMax: 2026,
   disasterGroup: "Natural",
+  disasterSubgroup: "All",
   disasterType: "All",
+  disasterSubtype: "All",
   scope: "all",
   subregion: "",
   country: "",
@@ -186,6 +202,7 @@ Component: `components/MetricCards.tsx`
 |-----|---------|
 | **Asia-Pacific** | 4 summary cards for the filtered dataset |
 | **By subregion** | Table with 5 subregion rows × 4 metrics |
+| **By country** | Sortable table with country rows × 4 metrics |
 
 ### 5.2 Metrics displayed
 
@@ -241,7 +258,7 @@ All charts respect global filters (year, disaster group, disaster type, geograph
 | All Asia-Pacific scope | One bar per year for the whole region |
 | Trend line | Amber dashed linear regression overlay |
 
-### 6.3 Pie chart — disaster type distribution
+### 6.3 Pie chart — disaster distribution
 
 **Component:** `components/PieChartWidget.tsx`
 
@@ -249,8 +266,11 @@ All charts respect global filters (year, disaster group, disaster type, geograph
 |---------|-----------|
 | Chart type | Pie chart |
 | Scope | Follows global geography scope |
-| Grouping | Top **5** disaster types + **Other** |
-| Labels | Type name + percentage |
+| Mode | **Event share** (disaster count) or **Impact share** (sum of deaths / affected / damage) |
+| Break down by | Disaster Subtype, Type, or Subgroup |
+| Grouping | Top **8** slices + **Other** |
+| Labels | Classification name + percentage |
+| Footnote | Impact share shows how many events have reported values for the selected metric |
 | Trend lines | Not applicable |
 
 ---
@@ -345,8 +365,7 @@ asiapacific-disaster-dashboard/
 2. **Country coverage:** 47 countries after normalization; not all ESCAP member states appear in the source file.
 3. **Pie chart:** No trend line (not meaningful for categorical distribution).
 4. **SSR chart warnings:** Recharts may log width/height warnings during static generation; charts render correctly in the browser.
-5. **Disaster type filter:** Shows all types from full dataset, not dynamically filtered by selected disaster group.
-6. **Line chart view controls:** Geography view selectors on the line chart are independent of the global geography scope filter (both apply: global filter narrows data; local control chooses aggregation view).
+5. **Line chart view controls:** Geography view selectors on the line chart are independent of the global geography scope filter (both apply: global filter narrows data; local control chooses aggregation view).
 
 ---
 
@@ -359,7 +378,9 @@ To return to this baseline after changes:
 - [ ] Default disaster group = Natural
 - [ ] China territories rolled into China
 - [ ] Russia mapped to ENEA only
-- [ ] Metric tabs: Asia-Pacific | By subregion
+- [ ] Metric tabs: Asia-Pacific | By subregion | By country
+- [ ] Disaster filters: Group + Type (advanced: Subgroup + Subtype)
+- [ ] Pie chart: Event share + Impact share modes
 - [ ] Line chart: compare subregions + trend lines
 - [ ] Bar chart: metric toggle + yearly bars + trend line
 - [ ] Pie chart: top 5 + Other with percentages
@@ -406,3 +427,4 @@ git remote set-url origin https://github.com/Share1984/asiapacific-disaster-dash
 |------|---------|---------|
 | 2026-06-15 | 1.0 | Initial baseline: full dashboard, static JSON pipeline, filters, metrics, three charts, trend lines on line + bar charts |
 | 2026-06-24 | 1.1 | GitHub repo transferred to Share1984; Firebase App Hosting live on `emdatdashboard` (Blaze, Node 22, us-east4); deployment and live URL documented |
+| 2026-06-24 | 1.2 | Full EM-DAT classification hierarchy (group/subgroup/type/subtype); cascading filters with advanced expander; country metrics tab; pie chart event vs impact share |

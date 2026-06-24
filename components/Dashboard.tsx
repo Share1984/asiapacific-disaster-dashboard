@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   applyFilters,
+  computeCountryTotals,
   computeSubregionTotals,
   computeTotals,
   getUniqueValues,
@@ -22,7 +23,9 @@ const DEFAULT_FILTERS: DashboardFilters = {
   yearMin: 1970,
   yearMax: 2026,
   disasterGroup: "Natural",
+  disasterSubgroup: "All",
   disasterType: "All",
+  disasterSubtype: "All",
   scope: "all",
   subregion: "",
   country: "",
@@ -43,6 +46,10 @@ export function Dashboard({ records }: DashboardProps) {
     () => computeSubregionTotals(filtered),
     [filtered],
   );
+  const countryTotals = useMemo(
+    () => computeCountryTotals(filtered),
+    [filtered],
+  );
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -57,8 +64,8 @@ export function Dashboard({ records }: DashboardProps) {
 
       <FilterBar
         filters={filters}
+        records={records}
         disasterGroups={uniqueValues.disasterGroups}
-        disasterTypes={uniqueValues.disasterTypes}
         countries={uniqueValues.countries}
         onChange={setFilters}
       />
@@ -66,6 +73,7 @@ export function Dashboard({ records }: DashboardProps) {
       <MetricCards
         regionalTotals={regionalTotals}
         subregionTotals={subregionTotals}
+        countryTotals={countryTotals}
       />
 
       <LineChartWidget records={records} filters={filters} />
