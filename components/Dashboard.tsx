@@ -63,6 +63,8 @@ export function Dashboard({ records }: DashboardProps) {
         </p>
       </header>
 
+      <ReportChat filters={filters} />
+
       <FilterBar
         filters={filters}
         records={records}
@@ -83,8 +85,6 @@ export function Dashboard({ records }: DashboardProps) {
         <BarChartWidget records={records} filters={filters} />
         <PieChartWidget records={records} filters={filters} />
       </div>
-
-      <ReportChat filters={filters} />
     </div>
   );
 }
