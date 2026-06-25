@@ -14,6 +14,7 @@ import { MetricCards } from "./MetricCards";
 import { LineChartWidget } from "./LineChartWidget";
 import { BarChartWidget } from "./BarChartWidget";
 import { PieChartWidget } from "./PieChartWidget";
+import { ReportChat } from "./ReportChat";
 
 interface DashboardProps {
   records: DisasterRecord[];
@@ -82,6 +83,8 @@ export function Dashboard({ records }: DashboardProps) {
         <BarChartWidget records={records} filters={filters} />
         <PieChartWidget records={records} filters={filters} />
       </div>
+
+      <ReportChat filters={filters} />
     </div>
   );
 }
