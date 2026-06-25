@@ -1,6 +1,6 @@
 # Asia Pacific Em-dat Dashboard — Baseline Document
 
-**Version:** 1.4  
+**Version:** 1.5  
 **Last updated:** June 25, 2026  
 **Purpose:** Reference baseline for dashboard scope, data rules, UI behaviour, and implementation. Use this document to restore or compare against the agreed functionality.
 
@@ -17,6 +17,8 @@
 | **Data source** | EM-DAT export (`Emdat-asia pacific.xlsx`) |
 | **Runtime data** | Static JSON (`data/disasters.json`) generated at build time |
 | **Report Q&A** | APDR 2025 interrogation via `/api/ask` (Anthropic); chunks in `data/apdr2025-chunks.json` |
+| **EM-DAT explain** | Filtered-view AI summary via `/api/explain`; grounded in `ViewSnapshot` from `aggregations.ts` |
+| **AI rate limit** | **10 questions/day (UTC)** shared across `/api/ask` and `/api/explain`; Firestore counters; banner via `/api/quota` |
 | **Live URL** | https://asiapacific-disaster-dashboard--emdatdashboard.us-east4.hosted.app/ |
 | **GitHub** | https://github.com/Share1984/asiapacific-disaster-dashboard |
 | **Firebase project** | `emdatdashboard` (App Hosting, Blaze plan) |
@@ -341,6 +343,43 @@ All charts respect global filters (year, disaster classification, geography scop
 - If not directly addressed: lead with “Not explicitly addressed in APDR 2025” and optional adjacent evidence
 - Quantitative `keyData` must come from excerpt text
 
+### 6.5 Explain EM-DAT view — filtered data summary
+
+**Component:** `components/EmdatExplain.tsx`  
+**API:** `POST /api/explain` with body `{ filters: DashboardFilters, question?: string }`
+
+| Feature | Behaviour |
+|---------|-----------|
+| Placement | **Below filters**, above metric cards |
+| Scope | Current **EM-DAT filter slice only** — separate from Ask APDR 2025 above |
+| Collapse | Header chevron expander; **collapsed by default**; collapsed shows optional “Explained: …” summary |
+| Input | Optional focus question + **Explain this view** + **Clear** |
+| Grounding | Server builds `ViewSnapshot` (`lib/view-snapshot.ts`) from filtered records; LLM uses snapshot numbers only |
+| Response UI | Filter summary, key findings, metrics, caveats, suggested explorations |
+| Loading | Button shows “Analyzing view…” while awaiting API |
+
+**Rules (enforced in prompt):**
+- No APDR report text; no invented statistics beyond the snapshot
+- Mention sparse damage/affected reporting when `dataQuality` supports it
+
+### 6.6 AI question quota (shared rate limit)
+
+**UI:** `components/useAiQuota.tsx` — banner between Ask APDR and filters  
+**API:** `GET /api/quota` (peek remaining); enforcement on `POST /api/ask` and `POST /api/explain`
+
+| Feature | Behaviour |
+|---------|-----------|
+| Limit | **10 AI questions per calendar day (UTC)** per visitor (session cookie + IP hash) |
+| Shared pool | Ask APDR and Explain EM-DAT both consume from the **same** counter |
+| Storage | Firestore collection `ai_quota`; doc id `{identityHash}_{YYYY-MM-DD}` |
+| Banner | “AI questions today: X of 10 remaining (resets midnight UTC)…” |
+| Exhausted | `429` on AI POST; Ask/Explain buttons disabled when remaining = 0; charts/filters still work |
+| Bypass | Header `x-ai-bypass` matching `AI_BYPASS_TOKEN` → unlimited (for owner/testing) |
+| Client bypass | `localStorage.ai_bypass_token` sent as header via `lib/ai-client-headers.ts` |
+| Fallback display | Client shows default 10/10 before API responds; `/api/quota` returns fallback if Firestore peek fails |
+
+**Local dev:** set `AI_RATE_LIMIT_DISABLED=true` in `.env.local` to skip Firestore enforcement.
+
 ---
 
 ## 7. Trend line implementation
@@ -366,7 +405,7 @@ All charts respect global filters (year, disaster classification, geography scop
 | Typography | Geist Sans (via `next/font`) |
 | Card style | Rounded xl, border `slate-200`, light shadow |
 | Accent colour | Sky blue (`#0284c7`) for primary data series |
-| Page structure | Header → **Ask APDR 2025** → Filters → Metrics → Line chart → Bar + Pie (2-column on xl) |
+| Page structure | Header → **Ask APDR 2025** → **AI quota banner** → Filters → **Explain EM-DAT view** → Metrics → Line chart → Bar + Pie (2-column on xl) |
 
 ---
 
@@ -377,7 +416,7 @@ asiapacific-disaster-dashboard/
 ├── Emdat-asia pacific.xlsx          # EM-DAT source (~1.8 MB, committed)
 ├── AsiaPacificDR/
 │   └── APDR2025.pdf                 # APDR source for ingest (local; optional in repo)
-├── apphosting.yaml                  # Firebase App Hosting env (ANTHROPIC_API_KEY secret ref)
+├── apphosting.yaml                  # Firebase env: ANTHROPIC_API_KEY, AI_BYPASS_TOKEN, rate limit
 ├── BASELINE.md                      # This document
 ├── data/
 │   ├── disasters.json               # EM-DAT JSON (~1.3 MB; regenerated on build)
@@ -390,6 +429,13 @@ asiapacific-disaster-dashboard/
 │   ├── escap-regions.ts             # Country → subregion mapping
 │   ├── china-normalize.ts           # China territory rollup
 │   ├── aggregations.ts              # Filter + sum + chart data helpers
+│   ├── view-snapshot.ts             # EM-DAT explain snapshot builder
+│   ├── dashboard-explain.ts         # EM-DAT explain LLM prompt + parser
+│   ├── dashboard-explain-types.ts   # Explain response types
+│   ├── ai-rate-limit.ts             # Firestore quota consume/peek
+│   ├── ai-quota-http.ts             # Shared quota enforcement for API routes
+│   ├── ai-client-headers.ts         # Client bypass header helper
+│   ├── firestore-admin.ts           # Firebase Admin / Firestore init
 │   ├── trend.ts                     # Linear regression trend lines
 │   ├── format.ts                    # Number/percentage formatting
 │   ├── report-types.ts              # Report chunk + interrogation answer types
@@ -398,15 +444,20 @@ asiapacific-disaster-dashboard/
 │   ├── report-interrogation.ts      # LLM prompt + JSON parse helpers
 │   └── report-chunks.ts             # Re-exports for report modules
 ├── components/
-│   ├── Dashboard.tsx                # Main client shell + filter state
+│   ├── Dashboard.tsx                # Main client shell + filter state + quota
 │   ├── ReportChat.tsx               # Ask APDR 2025 panel
+│   ├── EmdatExplain.tsx             # Explain EM-DAT view panel
+│   ├── useAiQuota.tsx               # Quota fetch + banner component
 │   ├── FilterBar.tsx
 │   ├── MetricCards.tsx
 │   ├── LineChartWidget.tsx
 │   ├── BarChartWidget.tsx
 │   └── PieChartWidget.tsx
 └── app/
-    ├── api/ask/route.ts             # Report interrogation API (server)
+    ├── api/
+    │   ├── ask/route.ts             # Report interrogation API (server)
+    │   ├── explain/route.ts         # EM-DAT view explain API (server)
+    │   └── quota/route.ts           # AI quota peek (GET)
     ├── page.tsx                     # Server page; imports JSON, renders Dashboard
     ├── layout.tsx                   # Root layout + metadata
     └── globals.css                  # Tailwind + light theme tokens
@@ -425,6 +476,15 @@ asiapacific-disaster-dashboard/
 | `npm run start` | Serve production build |
 | `npm run lint` | ESLint |
 
+**Local `.env.local` (not committed):**
+
+| Variable | Purpose |
+|----------|---------|
+| `ANTHROPIC_API_KEY` | Required for `/api/ask` and `/api/explain` locally |
+| `AI_RATE_LIMIT_DISABLED=true` | Skip Firestore rate limit in dev (recommended) |
+| `AI_BYPASS_TOKEN` | Optional; test bypass header locally |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Optional; test Firestore quota locally |
+
 ---
 
 ## 11. Dependencies (baseline)
@@ -434,7 +494,9 @@ asiapacific-disaster-dashboard/
 - `react` / `react-dom` 19.2.4
 - `recharts` ^3.8.1
 - `lucide-react` ^1.18.0
-- `@anthropic-ai/sdk` ^0.106.0 — report Q&A API
+- `@anthropic-ai/sdk` ^0.106.0 — report Q&A and EM-DAT explain APIs
+- `firebase-admin` ^14.1.0 — Firestore rate-limit counters (production)
+- `@opentelemetry/api` ^1.9.1 — required peer for Firestore client
 - `pdf-parse` ^2.4.5 — PDF text extraction (ingest script)
 
 **Dev (data + tooling):**
@@ -457,6 +519,9 @@ asiapacific-disaster-dashboard/
 8. **APDR Q&A scope:** Only APDR 2025 is indexed; answers are from retrieved PDF excerpts, not EM-DAT charts. Other annual reports (2017–2023) are not in the baseline index unless ingested separately.
 9. **APDR API:** Requires `ANTHROPIC_API_KEY` at runtime; production uses Firebase Secret Manager (`apphosting.yaml`). Each question incurs API cost.
 10. **PDF figures:** Chart/map content in APDR is not vision-parsed; only extracted text and captions are searchable.
+11. **AI quota (production):** Requires Firestore enabled and App Hosting service account with **Cloud Datastore User**. Deploy fails if `AI_BYPASS_TOKEN` is referenced in `apphosting.yaml` but missing from Secret Manager.
+12. **AI quota (local):** Use `AI_RATE_LIMIT_DISABLED=true` in `.env.local` unless testing Firestore with `FIREBASE_SERVICE_ACCOUNT_JSON`.
+13. **Two AI features:** Ask APDR (report PDF) and Explain EM-DAT (filtered charts) are separate data sources; do not merge their answers in UI copy.
 
 ---
 
@@ -476,9 +541,12 @@ To return to this baseline after changes:
 - [ ] Bar chart: metric toggle + yearly bars + trend line (through 2025)
 - [ ] Trend lines exclude 2026 from regression and display
 - [ ] Ask APDR 2025 panel above filters; expander + Clear
+- [ ] AI quota banner between Ask APDR and filters (10/day UTC, shared)
+- [ ] Explain EM-DAT view below filters; expander + Explain this view + Clear
 - [ ] `data/apdr2025-chunks.json` present; `npm run ingest-reports` if PDF updated
-- [ ] `apphosting.yaml` references `ANTHROPIC_API_KEY` secret; backend has secret access
-- [ ] Local `.env.local` has `ANTHROPIC_API_KEY` for dev (not committed)
+- [ ] `apphosting.yaml` secrets: `ANTHROPIC_API_KEY`, `AI_BYPASS_TOKEN`; backend grantaccess for both
+- [ ] Firestore enabled; App Hosting service account has Cloud Datastore User
+- [ ] Local `.env.local`: `ANTHROPIC_API_KEY`; optional `AI_RATE_LIMIT_DISABLED=true` (not committed)
 - [ ] Light theme, title "Asia Pacific Em-dat dashboard"
 - [ ] `npm run build` and `npm run lint` pass with no TypeScript errors
 - [ ] GitHub repo at `Share1984/asiapacific-disaster-dashboard`
@@ -504,14 +572,30 @@ To return to this baseline after changes:
 | **Build command** | `npm run build` (runs `prebuild` → `parse-data`) |
 | **Live URL** | https://asiapacific-disaster-dashboard--emdatdashboard.us-east4.hosted.app/ |
 | **App Hosting backend** | `asiapacific-disaster-dashboard` |
-| **Production secret** | `ANTHROPIC_API_KEY` (Cloud Secret Manager; see `apphosting.yaml`) |
+| **Production secrets** | `ANTHROPIC_API_KEY`, `AI_BYPASS_TOKEN` (Cloud Secret Manager; see `apphosting.yaml`) |
+| **Production env** | `FIREBASE_PROJECT_ID=emdatdashboard`, `AI_RATE_LIMIT_MAX=10` |
 
-**Set production API key (one-time):**
+**Set production secrets (one-time):**
 
 ```bash
 npx firebase-tools apphosting:secrets:set ANTHROPIC_API_KEY --project emdatdashboard
 npx firebase-tools apphosting:secrets:grantaccess ANTHROPIC_API_KEY \
   --backend asiapacific-disaster-dashboard --project emdatdashboard
+
+npx firebase-tools apphosting:secrets:set AI_BYPASS_TOKEN --project emdatdashboard
+npx firebase-tools apphosting:secrets:grantaccess AI_BYPASS_TOKEN \
+  --backend asiapacific-disaster-dashboard --project emdatdashboard
+```
+
+**Firestore (required for live rate limiting):**
+
+1. Firebase Console → **Firestore Database** → create database (if not exists)
+2. Google Cloud IAM → grant App Hosting service account role **Cloud Datastore User** (`roles/datastore.user`)
+
+**Owner bypass (browser, after deploy):**
+
+```javascript
+localStorage.setItem('ai_bypass_token', 'YOUR_AI_BYPASS_TOKEN_VALUE')
 ```
 
 **Accounts:**
@@ -535,3 +619,4 @@ git remote set-url origin https://github.com/Share1984/asiapacific-disaster-dash
 | 2026-06-24 | 1.2 | Full EM-DAT classification hierarchy (group/subgroup/type/subtype); cascading filters with advanced expander; country metrics tab; pie chart event vs impact share |
 | 2026-06-24 | 1.3 | Main filters: Group + Type; advanced: Subgroup + Subtype; trend lines fit through 2025 only (2026 excluded); documentation sync |
 | 2026-06-25 | 1.4 | APDR 2025 report interrogation: structured PDF ingest, `/api/ask`, ReportChat above filters, Firebase `ANTHROPIC_API_KEY` secret, expander + Clear; LineChart trend typing fix for production build |
+| 2026-06-25 | 1.5 | Explain EM-DAT view (`/api/explain`, ViewSnapshot); shared AI rate limit (10/day UTC, Firestore, `/api/quota`); `AI_BYPASS_TOKEN` secret; `@opentelemetry/api` + `firebase-admin`; quota banner; local `AI_RATE_LIMIT_DISABLED` |
