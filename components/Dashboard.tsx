@@ -15,6 +15,7 @@ import { LineChartWidget } from "./LineChartWidget";
 import { BarChartWidget } from "./BarChartWidget";
 import { PieChartWidget } from "./PieChartWidget";
 import { ReportChat } from "./ReportChat";
+import { EmdatExplain } from "./EmdatExplain";
 
 interface DashboardProps {
   records: DisasterRecord[];
@@ -72,6 +73,8 @@ export function Dashboard({ records }: DashboardProps) {
         countries={uniqueValues.countries}
         onChange={setFilters}
       />
+
+      <EmdatExplain filters={filters} />
 
       <MetricCards
         regionalTotals={regionalTotals}
