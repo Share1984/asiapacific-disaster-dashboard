@@ -3,6 +3,11 @@ import * as path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import {
+  applyQuotaToResponse,
+  enforceAiQuotaOrRespond,
+  quotaPayload,
+} from "@/lib/ai-quota-http";
+import {
   buildInterrogationUserPrompt,
   INTERROGATION_SYSTEM_PROMPT,
   parseInterrogationAnswer,
@@ -45,6 +50,11 @@ function buildContextNote(context: ReportAskContext): string {
 
 export async function POST(request: Request) {
   try {
+    const quotaCheck = await enforceAiQuotaOrRespond(request);
+    if (!quotaCheck.ok) {
+      return quotaCheck.response;
+    }
+
     const apiKey = process.env.ANTHROPIC_API_KEY ?? process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -100,11 +110,14 @@ export async function POST(request: Request) {
 
     const answer = parseInterrogationAnswer(rawAnswer, question);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       answer,
       source: store.source,
       year: store.year,
+      quota: quotaPayload(quotaCheck.enforcement.quota),
     });
+
+    return applyQuotaToResponse(response, quotaCheck.enforcement);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unexpected server error.";

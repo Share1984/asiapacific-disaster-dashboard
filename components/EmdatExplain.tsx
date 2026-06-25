@@ -4,9 +4,13 @@ import { useState } from "react";
 import { BarChart3, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import type { DashboardExplanation } from "@/lib/dashboard-explain-types";
 import type { DashboardFilters } from "@/lib/types";
+import { getAiRequestHeaders } from "@/lib/ai-client-headers";
+import type { AiQuotaState } from "./useAiQuota";
 
 interface EmdatExplainProps {
   filters: DashboardFilters;
+  quota: AiQuotaState | null;
+  onQuotaUpdate: (data: { quota?: AiQuotaState }) => void;
 }
 
 function AnswerSection({
@@ -86,7 +90,11 @@ function StructuredExplanation({
   );
 }
 
-export function EmdatExplain({ filters }: EmdatExplainProps) {
+export function EmdatExplain({
+  filters,
+  quota,
+  onQuotaUpdate,
+}: EmdatExplainProps) {
   const [expanded, setExpanded] = useState(false);
   const [question, setQuestion] = useState("");
   const [explanation, setExplanation] = useState<DashboardExplanation | null>(
@@ -94,6 +102,8 @@ export function EmdatExplain({ filters }: EmdatExplainProps) {
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const quotaExhausted = quota !== null && quota.remaining <= 0;
 
   const canClear = Boolean(question.trim() || explanation || error);
 
@@ -110,7 +120,10 @@ export function EmdatExplain({ filters }: EmdatExplainProps) {
     try {
       const response = await fetch("/api/explain", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAiRequestHeaders(),
+        },
         body: JSON.stringify({
           filters,
           question: question.trim() || undefined,
@@ -120,12 +133,15 @@ export function EmdatExplain({ filters }: EmdatExplainProps) {
       const data = (await response.json()) as {
         explanation?: DashboardExplanation;
         error?: string;
+        quota?: { remaining: number; limit: number; resetAt: string };
       };
 
       if (!response.ok) {
+        onQuotaUpdate(data);
         throw new Error(data.error ?? "Request failed.");
       }
 
+      onQuotaUpdate(data);
       setExplanation(data.explanation ?? null);
       setExpanded(true);
     } catch (submitError) {
@@ -199,7 +215,7 @@ export function EmdatExplain({ filters }: EmdatExplainProps) {
             <div className="flex flex-wrap gap-3">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || quotaExhausted}
                 className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 <Sparkles className="h-4 w-4" aria-hidden="true" />

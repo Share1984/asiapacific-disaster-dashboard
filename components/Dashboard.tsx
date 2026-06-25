@@ -16,6 +16,7 @@ import { BarChartWidget } from "./BarChartWidget";
 import { PieChartWidget } from "./PieChartWidget";
 import { ReportChat } from "./ReportChat";
 import { EmdatExplain } from "./EmdatExplain";
+import { AiQuotaNotice, useAiQuota } from "./useAiQuota";
 
 interface DashboardProps {
   records: DisasterRecord[];
@@ -35,6 +36,7 @@ const DEFAULT_FILTERS: DashboardFilters = {
 
 export function Dashboard({ records }: DashboardProps) {
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS);
+  const { quota, applyQuotaFromResponse, formatResetTime } = useAiQuota();
 
   const uniqueValues = useMemo(() => getUniqueValues(records), [records]);
 
@@ -64,7 +66,13 @@ export function Dashboard({ records }: DashboardProps) {
         </p>
       </header>
 
-      <ReportChat filters={filters} />
+      <ReportChat
+        filters={filters}
+        quota={quota}
+        onQuotaUpdate={applyQuotaFromResponse}
+      />
+
+      <AiQuotaNotice quota={quota} formatResetTime={formatResetTime} />
 
       <FilterBar
         filters={filters}
@@ -74,7 +82,11 @@ export function Dashboard({ records }: DashboardProps) {
         onChange={setFilters}
       />
 
-      <EmdatExplain filters={filters} />
+      <EmdatExplain
+        filters={filters}
+        quota={quota}
+        onQuotaUpdate={applyQuotaFromResponse}
+      />
 
       <MetricCards
         regionalTotals={regionalTotals}

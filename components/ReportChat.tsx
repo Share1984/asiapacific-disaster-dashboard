@@ -8,9 +8,13 @@ import type {
   EvidenceStrength,
   ReportInterrogationAnswer,
 } from "@/lib/report-types";
+import { getAiRequestHeaders } from "@/lib/ai-client-headers";
+import type { AiQuotaState } from "./useAiQuota";
 
 interface ReportChatProps {
   filters: DashboardFilters;
+  quota: AiQuotaState | null;
+  onQuotaUpdate: (data: { quota?: AiQuotaState }) => void;
 }
 
 const EVIDENCE_STRENGTH_STYLES: Record<EvidenceStrength, string> = {
@@ -161,12 +165,14 @@ function StructuredAnswer({ answer }: { answer: ReportInterrogationAnswer }) {
   );
 }
 
-export function ReportChat({ filters }: ReportChatProps) {
+export function ReportChat({ filters, quota, onQuotaUpdate }: ReportChatProps) {
   const [expanded, setExpanded] = useState(true);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<ReportInterrogationAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const quotaExhausted = quota !== null && quota.remaining <= 0;
 
   const canClear = Boolean(question.trim() || answer || error);
 
@@ -193,7 +199,10 @@ export function ReportChat({ filters }: ReportChatProps) {
     try {
       const response = await fetch("/api/ask", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAiRequestHeaders(),
+        },
         body: JSON.stringify({
           question: trimmed,
           context: {
@@ -208,12 +217,15 @@ export function ReportChat({ filters }: ReportChatProps) {
       const data = (await response.json()) as {
         answer?: ReportInterrogationAnswer;
         error?: string;
+        quota?: { remaining: number; limit: number; resetAt: string };
       };
 
       if (!response.ok) {
+        onQuotaUpdate(data);
         throw new Error(data.error ?? "Request failed.");
       }
 
+      onQuotaUpdate(data);
       setAnswer(data.answer ?? null);
     } catch (submitError) {
       setError(
@@ -285,7 +297,7 @@ export function ReportChat({ filters }: ReportChatProps) {
         <div className="flex flex-wrap gap-3">
           <button
             type="submit"
-            disabled={loading || !question.trim()}
+            disabled={loading || !question.trim() || quotaExhausted}
             className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             <SendHorizonal className="h-4 w-4" aria-hidden="true" />

@@ -1,3 +1,9 @@
 env:
   - variable: ANTHROPIC_API_KEY
     secret: ANTHROPIC_API_KEY
+  - variable: AI_BYPASS_TOKEN
+    secret: AI_BYPASS_TOKEN
+  - variable: FIREBASE_PROJECT_ID
+    value: emdatdashboard
+  - variable: AI_RATE_LIMIT_MAX
+    value: "10"
