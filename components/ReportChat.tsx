@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MessageCircle, SendHorizonal } from "lucide-react";
+import { ChevronDown, ChevronRight, MessageCircle, SendHorizonal } from "lucide-react";
 import type { DashboardFilters } from "@/lib/types";
 import type {
   EvidenceKind,
@@ -162,10 +162,13 @@ function StructuredAnswer({ answer }: { answer: ReportInterrogationAnswer }) {
 }
 
 export function ReportChat({ filters }: ReportChatProps) {
+  const [expanded, setExpanded] = useState(true);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<ReportInterrogationAnswer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const canClear = Boolean(question.trim() || answer || error);
 
   const contextLabel =
     filters.scope === "country" && filters.country
@@ -223,6 +226,12 @@ export function ReportChat({ filters }: ReportChatProps) {
     }
   }
 
+  function handleClear() {
+    setQuestion("");
+    setAnswer(null);
+    setError(null);
+  }
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-start gap-3">
@@ -238,9 +247,29 @@ export function ReportChat({ filters }: ReportChatProps) {
           {contextLabel ? (
             <p className="mt-1 text-xs text-sky-700">{contextLabel}</p>
           ) : null}
+          {!expanded && answer ? (
+            <p className="mt-2 truncate text-sm text-slate-600">
+              Answered: {answer.question}
+            </p>
+          ) : null}
         </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((open) => !open)}
+          aria-expanded={expanded}
+          aria-label={expanded ? "Collapse Ask APDR 2025" : "Expand Ask APDR 2025"}
+          className="shrink-0 rounded-lg p-2 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+        >
+          {expanded ? (
+            <ChevronDown className="h-5 w-5" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="h-5 w-5" aria-hidden="true" />
+          )}
+        </button>
       </div>
 
+      {expanded ? (
+        <>
       <form onSubmit={handleSubmit} className="mt-5 space-y-4">
         <label htmlFor="report-question" className="sr-only">
           Question about APDR 2025
@@ -253,14 +282,24 @@ export function ReportChat({ filters }: ReportChatProps) {
           placeholder="e.g. What does the report say about heat as a systemic risk multiplier?"
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-200"
         />
-        <button
-          type="submit"
-          disabled={loading || !question.trim()}
-          className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-        >
-          <SendHorizonal className="h-4 w-4" aria-hidden="true" />
-          {loading ? "Analyzing report..." : "Ask"}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="submit"
+            disabled={loading || !question.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            <SendHorizonal className="h-4 w-4" aria-hidden="true" />
+            {loading ? "Analyzing report..." : "Ask"}
+          </button>
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={loading || !canClear}
+            className="inline-flex items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+          >
+            Clear
+          </button>
+        </div>
       </form>
 
       {error ? (
@@ -279,6 +318,8 @@ export function ReportChat({ filters }: ReportChatProps) {
           </div>
           <p className="mt-4 text-xs text-slate-500">Source: APDR 2025</p>
         </div>
+      ) : null}
+        </>
       ) : null}
     </section>
   );
