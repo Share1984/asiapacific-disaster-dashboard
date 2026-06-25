@@ -1,7 +1,7 @@
 # Asia Pacific Em-dat Dashboard — Baseline Document
 
-**Version:** 1.3  
-**Last updated:** June 24, 2026  
+**Version:** 1.4  
+**Last updated:** June 25, 2026  
 **Purpose:** Reference baseline for dashboard scope, data rules, UI behaviour, and implementation. Use this document to restore or compare against the agreed functionality.
 
 ---
@@ -16,6 +16,7 @@
 | **Stack** | Next.js 16 (App Router), React 19, Tailwind CSS v4, Recharts 3, TypeScript |
 | **Data source** | EM-DAT export (`Emdat-asia pacific.xlsx`) |
 | **Runtime data** | Static JSON (`data/disasters.json`) generated at build time |
+| **Report Q&A** | APDR 2025 interrogation via `/api/ask` (Anthropic); chunks in `data/apdr2025-chunks.json` |
 | **Live URL** | https://asiapacific-disaster-dashboard--emdatdashboard.us-east4.hosted.app/ |
 | **GitHub** | https://github.com/Share1984/asiapacific-disaster-dashboard |
 | **Firebase project** | `emdatdashboard` (App Hosting, Blaze plan) |
@@ -101,6 +102,29 @@ Disaster Group → Disaster Subgroup → Disaster Type → Disaster Subtype
 | Subtype | 46 | Riverine flood, Tropical cyclone, Ground movement |
 
 For **Technological** disasters, type and subtype are typically 1:1. For **Natural** disasters, subtype is the most granular level.
+
+### 2.8 APDR 2025 report pipeline (report Q&A)
+
+Separate from EM-DAT. Powers the **Ask APDR 2025** panel only.
+
+| Item | Value |
+|------|-------|
+| **Source PDF** | `AsiaPacificDR/APDR2025.pdf` (local; not required at runtime if chunks are committed) |
+| **Ingest script** | `scripts/ingest-reports.ts` |
+| **Command** | `npm run ingest-reports` |
+| **Output** | `data/apdr2025-chunks.json` (committed; regenerate when PDF changes) |
+| **Chunking** | Page-aware, paragraph-level, with metadata (`section`, `pageStart`/`pageEnd`, `chunkType`, `countries`, `hazards`, `facts[]`) |
+| **Baseline chunk count** | 82 structured chunks (from ~288k characters extracted) |
+
+**Chunk metadata** (`lib/report-types.ts`): each chunk includes `chunkType` (e.g. `executive_summary`, `projection`, `recommendation`), ESCAP geography tags, hazard tags, and optional verbatim `facts[]` extracted from sentences containing numbers.
+
+**Retrieval** (`lib/report-search.ts`): keyword + intent scoring over chunk text and metadata; uses active dashboard filters (country, subregion, disaster type) as context; returns top 10 chunks; excludes `front_matter`.
+
+**LLM** (`app/api/ask/route.ts`): Anthropic `claude-sonnet-4-6`; structured JSON interrogation response per `lib/report-interrogation.ts` (direct findings, key data, evidence strength, gaps, citations). Answers use **only** retrieved excerpts — not EM-DAT statistics.
+
+**Secrets:**
+- **Local:** `ANTHROPIC_API_KEY` in `.env.local` (never commit)
+- **Production:** Cloud Secret Manager via `apphosting.yaml`; grant backend access with `firebase apphosting:secrets:grantaccess`
 
 ---
 
@@ -297,6 +321,26 @@ All charts respect global filters (year, disaster classification, geography scop
 | Footnote | Impact share shows how many events have reported values for the selected metric |
 | Trend lines | Not applicable |
 
+### 6.4 Ask APDR 2025 — report interrogation
+
+**Component:** `components/ReportChat.tsx`  
+**API:** `POST /api/ask` with body `{ question, context?: { country?, subregion?, disasterType? } }`
+
+| Feature | Behaviour |
+|---------|-----------|
+| Placement | **Above filters** (directly under page header) |
+| Scope | Asia-Pacific Disaster Report **2025 only** — separate from EM-DAT charts **below** |
+| Collapse | Header chevron expander; **expanded by default**; collapsed shows title + optional “Answered: …” summary |
+| Input | Textarea + **Ask** + **Clear** (clears question, answer, and error) |
+| Context | Passes active geography scope and disaster type to retrieval (does not send EM-DAT totals to the model) |
+| Response UI | Structured sections: direct findings, key data (with evidence tags), geographic/hazard focus, sectors, time horizon, evidence strength, gaps, citations |
+| Loading | Button shows “Analyzing report…” while awaiting API |
+
+**Rules (enforced in prompt):**
+- No invented statistics or rankings unless stated in excerpts
+- If not directly addressed: lead with “Not explicitly addressed in APDR 2025” and optional adjacent evidence
+- Quantitative `keyData` must come from excerpt text
+
 ---
 
 ## 7. Trend line implementation
@@ -322,7 +366,7 @@ All charts respect global filters (year, disaster classification, geography scop
 | Typography | Geist Sans (via `next/font`) |
 | Card style | Rounded xl, border `slate-200`, light shadow |
 | Accent colour | Sky blue (`#0284c7`) for primary data series |
-| Page structure | Header → Filters → Metrics → Line chart → Bar + Pie (2-column on xl) |
+| Page structure | Header → **Ask APDR 2025** → Filters → Metrics → Line chart → Bar + Pie (2-column on xl) |
 
 ---
 
@@ -330,27 +374,39 @@ All charts respect global filters (year, disaster classification, geography scop
 
 ```
 asiapacific-disaster-dashboard/
-├── Emdat-asia pacific.xlsx          # Source data (~1.8 MB, committed)
+├── Emdat-asia pacific.xlsx          # EM-DAT source (~1.8 MB, committed)
+├── AsiaPacificDR/
+│   └── APDR2025.pdf                 # APDR source for ingest (local; optional in repo)
+├── apphosting.yaml                  # Firebase App Hosting env (ANTHROPIC_API_KEY secret ref)
 ├── BASELINE.md                      # This document
 ├── data/
-│   └── disasters.json               # Generated JSON (~1.3 MB, committed; regenerated on build)
+│   ├── disasters.json               # EM-DAT JSON (~1.3 MB; regenerated on build)
+│   └── apdr2025-chunks.json         # APDR structured chunks (committed)
 ├── scripts/
-│   └── parse-emdat.ts               # Excel → JSON parser
+│   ├── parse-emdat.ts               # Excel → disasters.json
+│   └── ingest-reports.ts            # PDF → apdr2025-chunks.json
 ├── lib/
-│   ├── types.ts                     # TypeScript interfaces
+│   ├── types.ts                     # EM-DAT TypeScript interfaces
 │   ├── escap-regions.ts             # Country → subregion mapping
 │   ├── china-normalize.ts           # China territory rollup
 │   ├── aggregations.ts              # Filter + sum + chart data helpers
 │   ├── trend.ts                     # Linear regression trend lines
-│   └── format.ts                    # Number/percentage formatting
+│   ├── format.ts                    # Number/percentage formatting
+│   ├── report-types.ts              # Report chunk + interrogation answer types
+│   ├── report-ingest.ts             # PDF structural chunking + metadata
+│   ├── report-search.ts             # Chunk retrieval for Q&A
+│   ├── report-interrogation.ts      # LLM prompt + JSON parse helpers
+│   └── report-chunks.ts             # Re-exports for report modules
 ├── components/
 │   ├── Dashboard.tsx                # Main client shell + filter state
+│   ├── ReportChat.tsx               # Ask APDR 2025 panel
 │   ├── FilterBar.tsx
 │   ├── MetricCards.tsx
 │   ├── LineChartWidget.tsx
 │   ├── BarChartWidget.tsx
 │   └── PieChartWidget.tsx
 └── app/
+    ├── api/ask/route.ts             # Report interrogation API (server)
     ├── page.tsx                     # Server page; imports JSON, renders Dashboard
     ├── layout.tsx                   # Root layout + metadata
     └── globals.css                  # Tailwind + light theme tokens
@@ -363,8 +419,9 @@ asiapacific-disaster-dashboard/
 | Command | Purpose |
 |---------|---------|
 | `npm run parse-data` | Regenerate `data/disasters.json` from Excel |
+| `npm run ingest-reports` | Regenerate `data/apdr2025-chunks.json` from `AsiaPacificDR/APDR2025.pdf` |
 | `npm run dev` | Start dev server (http://localhost:3000) |
-| `npm run build` | Parse data + production build |
+| `npm run build` | Parse EM-DAT data + production build |
 | `npm run start` | Serve production build |
 | `npm run lint` | ESLint |
 
@@ -377,10 +434,13 @@ asiapacific-disaster-dashboard/
 - `react` / `react-dom` 19.2.4
 - `recharts` ^3.8.1
 - `lucide-react` ^1.18.0
+- `@anthropic-ai/sdk` ^0.106.0 — report Q&A API
+- `pdf-parse` ^2.4.5 — PDF text extraction (ingest script)
 
 **Dev (data + tooling):**
 - `xlsx` ^0.18.5 — Excel parsing
-- `tsx` ^4.22.4 — run parse script
+- `tsx` ^4.22.4 — run parse/ingest scripts
+- `@types/pdf-parse` ^1.1.5
 - `tailwindcss` ^4, `typescript` ^5
 
 ---
@@ -394,6 +454,9 @@ asiapacific-disaster-dashboard/
 5. **Pie chart:** No trend line (not meaningful for categorical distribution).
 6. **SSR chart warnings:** Recharts may log width/height warnings during static generation; charts render correctly in the browser.
 7. **Line chart view controls:** Geography view selectors on the line chart are independent of the global geography scope filter (both apply: global filter narrows data; local control chooses aggregation view).
+8. **APDR Q&A scope:** Only APDR 2025 is indexed; answers are from retrieved PDF excerpts, not EM-DAT charts. Other annual reports (2017–2023) are not in the baseline index unless ingested separately.
+9. **APDR API:** Requires `ANTHROPIC_API_KEY` at runtime; production uses Firebase Secret Manager (`apphosting.yaml`). Each question incurs API cost.
+10. **PDF figures:** Chart/map content in APDR is not vision-parsed; only extracted text and captions are searchable.
 
 ---
 
@@ -412,6 +475,10 @@ To return to this baseline after changes:
 - [ ] Line chart: compare subregions + trend lines (through 2025)
 - [ ] Bar chart: metric toggle + yearly bars + trend line (through 2025)
 - [ ] Trend lines exclude 2026 from regression and display
+- [ ] Ask APDR 2025 panel above filters; expander + Clear
+- [ ] `data/apdr2025-chunks.json` present; `npm run ingest-reports` if PDF updated
+- [ ] `apphosting.yaml` references `ANTHROPIC_API_KEY` secret; backend has secret access
+- [ ] Local `.env.local` has `ANTHROPIC_API_KEY` for dev (not committed)
 - [ ] Light theme, title "Asia Pacific Em-dat dashboard"
 - [ ] `npm run build` and `npm run lint` pass with no TypeScript errors
 - [ ] GitHub repo at `Share1984/asiapacific-disaster-dashboard`
@@ -436,6 +503,16 @@ To return to this baseline after changes:
 | **Node version (Firebase)** | **22** |
 | **Build command** | `npm run build` (runs `prebuild` → `parse-data`) |
 | **Live URL** | https://asiapacific-disaster-dashboard--emdatdashboard.us-east4.hosted.app/ |
+| **App Hosting backend** | `asiapacific-disaster-dashboard` |
+| **Production secret** | `ANTHROPIC_API_KEY` (Cloud Secret Manager; see `apphosting.yaml`) |
+
+**Set production API key (one-time):**
+
+```bash
+npx firebase-tools apphosting:secrets:set ANTHROPIC_API_KEY --project emdatdashboard
+npx firebase-tools apphosting:secrets:grantaccess ANTHROPIC_API_KEY \
+  --backend asiapacific-disaster-dashboard --project emdatdashboard
+```
 
 **Accounts:**
 - **Share1984** — GitHub repo owner; connected to Firebase App Hosting for deploys
@@ -457,3 +534,4 @@ git remote set-url origin https://github.com/Share1984/asiapacific-disaster-dash
 | 2026-06-24 | 1.1 | GitHub repo transferred to Share1984; Firebase App Hosting live on `emdatdashboard` (Blaze, Node 22, us-east4); deployment and live URL documented |
 | 2026-06-24 | 1.2 | Full EM-DAT classification hierarchy (group/subgroup/type/subtype); cascading filters with advanced expander; country metrics tab; pie chart event vs impact share |
 | 2026-06-24 | 1.3 | Main filters: Group + Type; advanced: Subgroup + Subtype; trend lines fit through 2025 only (2026 excluded); documentation sync |
+| 2026-06-25 | 1.4 | APDR 2025 report interrogation: structured PDF ingest, `/api/ask`, ReportChat above filters, Firebase `ANTHROPIC_API_KEY` secret, expander + Clear; LineChart trend typing fix for production build |
