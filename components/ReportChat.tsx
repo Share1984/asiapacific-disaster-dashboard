@@ -233,7 +233,7 @@ export function ReportChat({ filters }: ReportChatProps) {
           <h2 className="text-lg font-semibold text-slate-900">Ask APDR 2025</h2>
           <p className="mt-1 text-sm text-slate-600">
             Interrogate the Asia-Pacific Disaster Report 2025 with structured,
-            cited answers — separate from the EM-DAT charts above.
+            cited answers — separate from the EM-DAT charts below.
           </p>
           {contextLabel ? (
             <p className="mt-1 text-xs text-sky-700">{contextLabel}</p>
