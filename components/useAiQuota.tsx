@@ -9,6 +9,21 @@ export interface AiQuotaState {
   resetAt: string;
 }
 
+const DEFAULT_DAILY_LIMIT = 10;
+
+export function buildDefaultQuota(
+  limit = DEFAULT_DAILY_LIMIT,
+): AiQuotaState {
+  const reset = new Date();
+  reset.setUTCDate(reset.getUTCDate() + 1);
+  reset.setUTCHours(0, 0, 0, 0);
+  return {
+    remaining: limit,
+    limit,
+    resetAt: reset.toISOString(),
+  };
+}
+
 export function formatResetTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
@@ -22,7 +37,7 @@ export function formatResetTime(iso: string): string {
 }
 
 export function useAiQuota() {
-  const [quota, setQuota] = useState<AiQuotaState | null>(null);
+  const [quota, setQuota] = useState<AiQuotaState>(() => buildDefaultQuota());
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +54,7 @@ export function useAiQuota() {
           setQuota(data.quota);
         }
       } catch {
-        // Quota display is optional; ignore fetch errors.
+        // Keep client default quota so the banner still renders.
       }
     }
 
@@ -62,13 +77,9 @@ export function AiQuotaNotice({
   quota,
   formatResetTime: formatReset,
 }: {
-  quota: AiQuotaState | null;
+  quota: AiQuotaState;
   formatResetTime: (iso: string) => string;
 }) {
-  if (!quota) {
-    return null;
-  }
-
   return (
     <p className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
       AI questions today: {quota.remaining} of {quota.limit} remaining (resets{" "}

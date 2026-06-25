@@ -22,9 +22,20 @@ const BYPASS_HEADER = "x-ai-bypass";
 
 const DEFAULT_LIMIT = 10;
 
-function getDailyLimit(): number {
+export function getDailyLimit(): number {
   const parsed = Number(process.env.AI_RATE_LIMIT_MAX ?? DEFAULT_LIMIT);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_LIMIT;
+}
+
+function getResetAt(date = new Date()): string {
+  const reset = new Date(date);
+  reset.setUTCDate(reset.getUTCDate() + 1);
+  reset.setUTCHours(0, 0, 0, 0);
+  return reset.toISOString();
+}
+
+export function getResetAtIso(): string {
+  return getResetAt();
 }
 
 function isRateLimitDisabled(): boolean {
@@ -33,13 +44,6 @@ function isRateLimitDisabled(): boolean {
 
 function getUtcDateKey(date = new Date()): string {
   return date.toISOString().slice(0, 10);
-}
-
-function getResetAt(date = new Date()): string {
-  const reset = new Date(date);
-  reset.setUTCDate(reset.getUTCDate() + 1);
-  reset.setUTCHours(0, 0, 0, 0);
-  return reset.toISOString();
 }
 
 function getClientIp(request: Request): string {
