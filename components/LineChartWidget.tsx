@@ -58,12 +58,12 @@ export function LineChartWidget({ records, filters }: LineChartWidgetProps) {
 
   const effectiveCountry = lineCountry || countriesInData[0] || "";
 
-  const chartData = useMemo(() => {
-    if (compareSubregions) {
-      const frequency = subregionFrequencyByYear(baseFiltered);
-      return addMultiTrendFields(frequency, [...ESCAP_SUBREGIONS]);
-    }
+  const compareChartData = useMemo(() => {
+    const frequency = subregionFrequencyByYear(baseFiltered);
+    return addMultiTrendFields(frequency, [...ESCAP_SUBREGIONS]);
+  }, [baseFiltered]);
 
+  const singleChartData = useMemo(() => {
     let frequency;
     if (viewMode === "all") {
       frequency = disasterFrequencyByYear(baseFiltered).map((d) => ({
@@ -87,13 +87,7 @@ export function LineChartWidget({ records, filters }: LineChartWidgetProps) {
     }
 
     return addTrendField(frequency, "count", "countTrend");
-  }, [
-    baseFiltered,
-    compareSubregions,
-    viewMode,
-    lineSubregion,
-    effectiveCountry,
-  ]);
+  }, [baseFiltered, viewMode, lineSubregion, effectiveCountry]);
 
   const title = compareSubregions
     ? "Disaster frequency by ESCAP subregion"
@@ -165,7 +159,7 @@ export function LineChartWidget({ records, filters }: LineChartWidgetProps) {
       <div className="h-80 min-h-80 min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           {compareSubregions ? (
-            <LineChart data={chartData}>
+            <LineChart data={compareChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="year" tick={{ fill: "#64748b", fontSize: 12 }} />
               <YAxis tick={{ fill: "#64748b", fontSize: 12 }} />
@@ -203,7 +197,7 @@ export function LineChartWidget({ records, filters }: LineChartWidgetProps) {
               ))}
             </LineChart>
           ) : (
-            <LineChart data={chartData}>
+            <LineChart data={singleChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="year" tick={{ fill: "#64748b", fontSize: 12 }} />
               <YAxis tick={{ fill: "#64748b", fontSize: 12 }} />

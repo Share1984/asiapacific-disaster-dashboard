@@ -27,7 +27,7 @@ export interface YearlyMetric {
 
 export interface SubregionYearlyCount {
   year: number;
-  [subregion: string]: number;
+  [subregion: string]: number | null;
 }
 
 export interface PieSlice {
